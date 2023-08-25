@@ -11,14 +11,15 @@ typedef struct {
 
 typedef struct {
     Page pages[PAGES_PER_BLOCK];
-    int valid[PAGES_PER_BLOCK]; //标记每个page是否有效
+    int valid[PAGES_PER_BLOCK]; 
 } Block;
 
 Block flash[TOTAL_BLOCKS];
-int L2P[TOTAL_BLOCKS]; // 逻辑块号到物理块号的映射
-int P2L[TOTAL_BLOCKS]; // 物理块号到逻辑块号的映射
 
-void initFTL() { // 初始化FTL
+int L2P[TOTAL_BLOCKS];
+int P2L[TOTAL_BLOCKS]; 
+
+void initFTL() { 
     for (int i = 0; i < TOTAL_BLOCKS; i++) {
         L2P[i] = -1;
         P2L[i] = -1;
@@ -28,7 +29,7 @@ void initFTL() { // 初始化FTL
     }
 }
 
-int allocateBlock() { // 分配一个新的物理块
+int allocateBlock() { 
     for (int i = 0; i < TOTAL_BLOCKS; i++) {
         if (L2P[i] == -1 && P2L[i] == -1) {
             return i;
@@ -37,7 +38,7 @@ int allocateBlock() { // 分配一个新的物理块
     return -1;
 }
 
-int invalidPagesInBlock(int block) { // 返回一个物理块中无效页的数量
+int invalidPagesInBlock(int block) { 
     int count = 0;
     for (int j = 0; j < PAGES_PER_BLOCK; j++) {
         if (flash[block].valid[j] == 0) {
@@ -45,6 +46,18 @@ int invalidPagesInBlock(int block) { // 返回一个物理块中无效页的数�
         }
     }
     return count;
+}
+
+void eraseBlock(int logicalBlock) {
+    int physicalBlock = L2P[logicalBlock];
+    if (physicalBlock != -1) {
+        for (int j = 0; j < PAGES_PER_BLOCK; j++) {
+            memset(flash[physicalBlock].pages[j].data, 0, PAGE_SIZE);
+            flash[physicalBlock].valid[j] = 0;
+        }
+        L2P[logicalBlock] = -1;
+        P2L[physicalBlock] = -1;
+    }
 }
 
 void garbageCollector() {
@@ -67,8 +80,10 @@ void garbageCollector() {
 void readPage(int logicalBlock, int page, char *buffer) {
     int physicalBlock = L2P[logicalBlock];
     if (physicalBlock != -1 && flash[physicalBlock].valid[page]) {
-        memcpy(buffer, flash[physicalBlock].pages[page].data, PAGE_SIZE);
-    }
+    memcpy(buffer, flash[physicalBlock].pages[page].data, PAGE_SIZE);
+} else {
+    memset(buffer, 0, PAGE_SIZE);
+}
 }
 
 void writePage(int logicalBlock, int page, char *buffer) {
@@ -87,6 +102,7 @@ void writePage(int logicalBlock, int page, char *buffer) {
         memcpy(flash[physicalBlock].pages[page].data, buffer, PAGE_SIZE);
         flash[physicalBlock].valid[page] = 1;
     } else {
+        flash[physicalBlock].valid[page] = 0;
         int newPhysicalBlock = allocateBlock();
         if (newPhysicalBlock == -1) {
             garbageCollector();
@@ -107,24 +123,22 @@ void writePage(int logicalBlock, int page, char *buffer) {
     }
 }
 
-void eraseBlock(int logicalBlock) {
-    int physicalBlock = L2P[logicalBlock];
-    if (physicalBlock != -1) {
-        for (int j = 0; j < PAGES_PER_BLOCK; j++) {
-            memset(flash[physicalBlock].pages[j].data, 0, PAGE_SIZE);
-            flash[physicalBlock].valid[j] = 0;
-        }
-        L2P[logicalBlock] = -1;
-        P2L[physicalBlock] = -1;
-    }
-}
-
 int main() {
     initFTL();
 
     char buffer[PAGE_SIZE] = "Hello";
-    writePage(10, 5, buffer);
     char readBuffer[PAGE_SIZE];
+    
+    writePage(10, 5, buffer);
+    readPage(10, 5, readBuffer);
+    printf("Read data: %s\n", readBuffer);
+
+    strcpy(buffer, "World");
+    writePage(10, 5, buffer);
+    readPage(10, 5, readBuffer);
+    printf("Read data: %s\n", readBuffer);
+
+    eraseBlock(10);
     readPage(10, 5, readBuffer);
     printf("Read data: %s\n", readBuffer);
 
